@@ -1,8 +1,10 @@
 from geopy.point import Point
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import CheckButtons
+import matplotlib
+from matplotlib.widgets import CheckButtons, Slider
 
+matplotlib.use('TkAgg')
 
 class City:
     def __init__(self, name: str, population: int, coordinates: Point):
@@ -115,11 +117,30 @@ def plot_cities_on_map(cities, map_image_path):
         else:
             selected_cities[:] = [city for city in selected_cities if city.name != label]
         
-        
+
         update_plot()  # Recalculate sizes and update the plot
 
     check.on_clicked(toggle_visibility)  # Call toggle_visibility when checkbox is clicked
 
+    #Slider code
+    ax_slider_iterations = plt.axes([0.25, 0.02, 0.65, 0.02], facecolor='lightgoldenrodyellow') #Create new axis with the iterations sliders
+    ax_slider_flow = plt.axes([0.25, 0.05, 0.65, 0.02], facecolor='lightgoldenrodyellow')       #Create new axis for the flow rate slider
+    ax_slider_diffusion = plt.axes([0.25, 0.08, 0.65, 0.02], facecolor='lightgoldenrodyellow')  #Create new axis for the diffusion slider
+
+    slider_iterations = Slider(ax_slider_iterations, 'Iterations', 1, 1000, valinit=100, valstep=1) #Create slider for iterations
+    slider_flow = Slider(ax_slider_flow, 'Flow Rate', 1, 1000, valinit=100, valstep=1)  #Create slider for flow rate
+    slider_diffusion = Slider(ax_slider_diffusion, 'Trail Diffusion', 1, 1000, valinit=100, valstep=1)  #create slider for diffusion
+
+    # Function for slider changes
+    def edit_sliders(val):
+        iterations = slider_iterations.val      # store value in the iterations
+        flow_rate = slider_flow.val             # store values in the flow rate
+        diffusion_time = slider_diffusion.val   #store values in the diffusion
+        print(f"Slider Values: Iterations- {iterations} Flow Rate- {flow_rate} Trail Diffusion- {diffusion_time}")
+
+    slider_iterations.on_changed(edit_sliders)  # run the slider function on iteration change
+    slider_flow.on_changed(edit_sliders)        # run the slider function on flow rate change
+    slider_diffusion.on_changed(edit_sliders)   # run the slider function on diffusion change
 
     plt.show()
 
