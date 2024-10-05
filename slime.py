@@ -72,6 +72,10 @@ class SlimeWindow(mglw.WindowConfig):
         self.videocapture = mglw.capture.FFmpegCapture(source=self.wnd.fbo)
 
     def restart_sim(self):
+        back_data = np.frombuffer(self.slimes.read(), dtype="f4")
+        stack = back_data.reshape((1000000, 4))
+        np.save("final_positions.npy", stack)
+
         self.world_texture01.release()
         self.world_texture02.release()
 
