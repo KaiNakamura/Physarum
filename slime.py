@@ -7,21 +7,58 @@ import moderngl as mgl
 import numpy as np
 import imgui
 from moderngl_window.integrations.imgui import ModernglWindowRenderer
+from city import cities
 
 
-def gen_data(N, size):
-    r = 500
-    angles = np.random.random(N) * 2 * np.pi
-    dst = np.random.random(N) * r
+def coord_to_pixel(coord, size):
+    lat_min, lat_max = 41.00, 43.00
+    lon_min, lon_max = -73.50, -69.90
 
-    a = size[0] / 2 + np.cos(angles) * dst
-    b = size[1] / 2 + np.sin(angles) * dst
+    x = np.interp(coord.latitude, [lat_min, lat_max], [0, size[0]])
+    y = np.interp(coord.longitude, [lon_min, lon_max], [0, size[1]])
 
-    return np.c_[a, b, (np.pi + angles), np.empty(N)]
+    return x, y
+
+
+def generate_food_data(size):
+    food_data = np.zeros((len(cities), 4), dtype="f4")
+
+    for i, city in enumerate(cities):
+        x, y = coord_to_pixel(city.coordinates, size)
+        # Map the latitude and longitude to the image coordinates
+        food_data[i, 0] = x
+        food_data[i, 1] = y
+        # food_data[i, 2] = np.sqrt(city.population / np.pi) / 10.0
+        food_data[i, 2] = 10
+        food_data[i, 3] = 0
+
+    return np.c_[food_data[:, 0], food_data[:, 1], food_data[:, 2], food_data[:, 3]]
+
+
+def generate_slime_data(N, food_data, size):
+    # Randomly select a food to start at for each slime particle
+    city_indices = np.random.choice(len(food_data), N)
+    x = food_data[city_indices, 0]
+    y = food_data[city_indices, 1]
+
+    # Generate random angles for the slime particles
+    angles = np.random.uniform(0, 2 * np.pi, N)
+
+    return np.c_[x, y, angles, np.empty(N)]
+
+    # # Generate random x and y coordinates within the bounds of the size
+    # x = np.random.uniform(0, size[0], N)
+    # y = np.random.uniform(0, size[1], N)
+
+    # # Generate random angles for the slime particles
+    # angles = np.random.uniform(0, 2 * np.pi, N)
+
+    # return np.c_[x, y, angles, np.empty(N)]
 
 
 class SlimeConfig:
-    num_slimes = 1_000_000
+    num_slimes = 1000000
+
     move_speed = 50.0
     angular_speed = 50.0
 
@@ -30,9 +67,6 @@ class SlimeConfig:
 
     evaporation_speed = 5.0
     diffusion_speed = 10.0
-
-    color1 = (0, 0, 0)
-    color2 = (1, 1, 1)
 
 
 class SlimeWindow(mglw.WindowConfig):
@@ -52,19 +86,14 @@ class SlimeWindow(mglw.WindowConfig):
 
         self.imgui = ModernglWindowRenderer(self.wnd)
 
-        self.world_texture01 = self.ctx.texture(self.map_size, 1, dtype="f1")
-        self.world_texture01.repeat_x, self.world_texture01.repeat_y = False, False
-        self.world_texture01.filter = mgl.NEAREST, mgl.NEAREST
+        self.current_texture = None
+        self.next_texture = None
+        self.food = None
+        self.slimes = None
 
-        self.world_texture02 = self.ctx.texture(self.map_size, 1, dtype="f1")
-        self.world_texture02.repeat_x, self.world_texture02.repeat_y = False, False
-        self.world_texture02.filter = mgl.NEAREST, mgl.NEAREST
-
-        data = gen_data(SlimeConfig.num_slimes, self.map_size).astype("f4")
-        self.slimes = self.ctx.buffer(data)  # each slime has a position and angle
-
+        self.create_textures()
+        self.generate_data()
         self.load_programs()
-
         self.update_uniforms()
 
         self.quad_fs = quad_fs(normals=False)
@@ -72,67 +101,103 @@ class SlimeWindow(mglw.WindowConfig):
         self.videocapture = mglw.capture.FFmpegCapture(source=self.wnd.fbo)
 
     def restart_sim(self):
-        self.world_texture01.release()
-        self.world_texture02.release()
+        self.create_textures()
+        self.generate_data()
 
-        self.world_texture01 = self.ctx.texture(self.map_size, 1, dtype="f1")
-        self.world_texture01.repeat_x, self.world_texture01.repeat_y = False, False
-        self.world_texture01.filter = mgl.NEAREST, mgl.NEAREST
+    def create_textures(self):
+        if not self.current_texture is None:
+            self.current_texture.release()
 
-        self.world_texture02 = self.ctx.texture(self.map_size, 1, dtype="f1")
-        self.world_texture02.repeat_x, self.world_texture02.repeat_y = False, False
-        self.world_texture02.filter = mgl.NEAREST, mgl.NEAREST
+        if not self.next_texture is None:
+            self.next_texture.release()
 
-        data = gen_data(SlimeConfig.num_slimes, self.map_size).astype("f4")
-        self.slimes.orphan(SlimeConfig.num_slimes * 4 * 4)
-        self.slimes.write(data)
+        self.current_texture = self.ctx.texture(self.map_size, 4)
+        self.current_texture.repeat_x, self.current_texture.repeat_y = False, False
+        self.current_texture.filter = mgl.NEAREST, mgl.NEAREST
+
+        self.next_texture = self.ctx.texture(self.map_size, 4)
+        self.next_texture.repeat_x, self.next_texture.repeat_y = False, False
+        self.next_texture.filter = mgl.NEAREST, mgl.NEAREST
+
+    def generate_data(self):
+        food_data = generate_food_data(self.map_size).astype("f4")
+        if self.food is None:
+            self.food = self.ctx.buffer(food_data)
+        else:
+            self.food.orphan(len(cities) * 4 * 4)
+            self.food.write(food_data)
+
+        slime_data = generate_slime_data(
+            SlimeConfig.num_slimes, food_data, self.map_size
+        ).astype("f4")
+        if self.slimes is None:
+            self.slimes = self.ctx.buffer(slime_data)
+        else:
+            self.slimes.orphan(SlimeConfig.num_slimes * 4 * 4)
+            self.slimes.write(slime_data)
 
     def update_uniforms(self):
-        self.blur["diffuseSpeed"] = SlimeConfig.diffusion_speed
-        self.blur["evaporateSpeed"] = SlimeConfig.evaporation_speed
+        self.blur_shader["diffuseSpeed"] = SlimeConfig.diffusion_speed
+        self.blur_shader["evaporateSpeed"] = SlimeConfig.evaporation_speed
 
-        self.compute_shader["numSlimes"] = SlimeConfig.num_slimes
+        self.food_shader["numFood"] = len(cities)
 
-        self.compute_shader["moveSpeed"] = SlimeConfig.move_speed
-        self.compute_shader["angularSpeed"] = SlimeConfig.angular_speed
+        self.slime_shader["numSlimes"] = SlimeConfig.num_slimes
 
-        self.compute_shader["sensorDistance"] = SlimeConfig.sensor_distance
-        self.compute_shader["sensorAngle"] = SlimeConfig.sensor_angle
+        self.slime_shader["moveSpeed"] = SlimeConfig.move_speed
+        self.slime_shader["angularSpeed"] = SlimeConfig.angular_speed
 
-        self.render_program["color1"] = SlimeConfig.color1
-        self.render_program["color2"] = SlimeConfig.color2
+        self.slime_shader["sensorDistance"] = SlimeConfig.sensor_distance
+        self.slime_shader["sensorAngle"] = SlimeConfig.sensor_angle
 
     def load_programs(self):
         self.render_program = self.load_program("render_texture.glsl")
         self.render_program["texture0"] = 0
-        self.compute_shader = self.load_compute_shader(
-            "update.glsl",
+        self.food_shader = self.load_compute_shader(
+            "food.glsl",
             {
                 "width": self.map_size[0],
                 "height": self.map_size[1],
                 "local_size": self.local_size,
             },
         )
-        self.blur = self.load_compute_shader("blur.glsl")
+        self.slime_shader = self.load_compute_shader(
+            "slime.glsl",
+            {
+                "width": self.map_size[0],
+                "height": self.map_size[1],
+                "local_size": self.local_size,
+            },
+        )
+        self.blur_shader = self.load_compute_shader("blur.glsl")
 
     def render(self, time: float, frame_time: float):
-        self.world_texture01.use(0)
+        # Run the food shader
+        self.current_texture.bind_to_image(0, read=True, write=False)
+        self.next_texture.bind_to_image(1, read=False, write=True)
+        self.food.bind_to_storage_buffer(2)
+        group_size = int(math.ceil(len(cities) / self.local_size))
+        self.food_shader.run(group_size, 1, 1)
+
+        # Run the slime shader
+        self.current_texture.bind_to_image(0, read=True, write=False)
+        self.next_texture.bind_to_image(1, read=False, write=True)
+        self.slimes.bind_to_storage_buffer(2)
+        group_size = int(math.ceil(SlimeConfig.num_slimes / self.local_size))
+        self.slime_shader.run(group_size, 1, 1)
+
+        # Run the blur shader
+        self.current_texture.bind_to_image(0, read=True, write=False)
+        self.next_texture.bind_to_image(1, read=True, write=True)
+        self.blur_shader.run(self.map_size[0] // 16 + 1, self.map_size[1] // 16 + 1)
+
+        # Renders the world texture to the screen
+        self.next_texture.use(0)
         self.quad_fs.render(self.render_program)
 
-        self.world_texture01.bind_to_image(1, read=True, write=False)
-        self.world_texture02.bind_to_image(0, read=False, write=True)
-        self.slimes.bind_to_storage_buffer(2)
-
-        group_size = int(math.ceil(SlimeConfig.num_slimes / self.local_size))
-        self.compute_shader.run(group_size, 1, 1)
-
-        self.world_texture01.bind_to_image(0, read=True, write=False)
-        self.world_texture02.bind_to_image(1, read=True, write=True)
-        self.blur.run(self.map_size[0] // 16 + 1, self.map_size[1] // 16 + 1)
-
-        self.world_texture01, self.world_texture02 = (
-            self.world_texture02,
-            self.world_texture01,
+        self.current_texture, self.next_texture = (
+            self.next_texture,
+            self.current_texture,
         )
 
         self.videocapture.save()
@@ -145,20 +210,20 @@ class SlimeWindow(mglw.WindowConfig):
             imgui.push_item_width(imgui.get_window_width() * 0.33)
             changed = False
             c, SlimeConfig.move_speed = imgui.slider_float(
-                "Movement speed", SlimeConfig.move_speed, 0.5, 50
+                "Movement speed", SlimeConfig.move_speed, 0.1, 100
             )
             changed = changed or c
             c, SlimeConfig.angular_speed = imgui.slider_float(
                 "Angular speed",
                 SlimeConfig.angular_speed,
-                0.5,
-                50,
+                0.1,
+                100,
             )
             c, SlimeConfig.sensor_distance = imgui.slider_int(
                 "Sensor distance",
                 SlimeConfig.sensor_distance,
                 1,
-                25,
+                100,
             )
             changed = changed or c
             c, SlimeConfig.sensor_angle = imgui.slider_float(
@@ -170,32 +235,19 @@ class SlimeWindow(mglw.WindowConfig):
             changed = changed or c
             changed = changed or c
             c, SlimeConfig.evaporation_speed = imgui.slider_float(
-                "Evaporation speed", SlimeConfig.evaporation_speed, 0.1, 20
+                "Evaporation speed", SlimeConfig.evaporation_speed, 0.01, 5
             )
             changed = changed or c
             c, SlimeConfig.diffusion_speed = imgui.slider_float(
                 "Diffusion speed",
                 SlimeConfig.diffusion_speed,
                 0.1,
-                20,
+                100,
             )
             changed = changed or c
             if changed:
                 self.update_uniforms()
             imgui.pop_item_width()
-
-        imgui.end()
-
-        if imgui.begin("Appearance"):
-            imgui.push_item_width(imgui.get_window_width() * 0.33)
-            changed_c1, SlimeConfig.color1 = imgui.color_edit3(
-                "Color1", *SlimeConfig.color1
-            )
-            changed_c2, SlimeConfig.color2 = imgui.color_edit3(
-                "Color2", *SlimeConfig.color2
-            )
-            if changed_c1 or changed_c2:
-                self.update_uniforms()
 
         imgui.end()
 
@@ -205,7 +257,8 @@ class SlimeWindow(mglw.WindowConfig):
                 "Number of Slimes", SlimeConfig.num_slimes, step=1024, step_fast=2**15
             )
             SlimeConfig.num_slimes = min(max(2048, SlimeConfig.num_slimes), 2**24)
-            if imgui.button("Restart Slimes"):
+
+            if imgui.button("Restart Simulation"):
                 self.restart_sim()
 
             imgui.pop_item_width()
