@@ -32,8 +32,7 @@ float getFoodValue(vec2 uv) {
 }
 
 float getSensorValue(vec2 uv) {
-  // return getTrailValue(uv);
-  return 0.5 * getTrailValue(uv) + getFoodValue(uv);
+  return getTrailValue(uv) + 100. * getFoodValue(uv);
 }
 
 varying vec2 vUv;
@@ -51,6 +50,16 @@ void main() {
   // Where to sample in the data trail texture to get the agent's world position
   vec4 src = texture2D(input_texture, vUv);
   vec4 val = src;
+
+  // Uncomment to see food
+  // if (getFoodValue(val.xy) > 0.9) {
+  //   gl_FragColor = val;
+  //   return;
+  // }
+  // else {
+  //   gl_FragColor = vec4(0., 0., 0., 1.);
+  //   return;
+  // }
   
   // Agent's heading 
   float angle = val.z * PI2;

@@ -32,25 +32,11 @@ const camera = new OrthographicCamera(-w / 2, w / 2, h / 2, -h / 2, 0.1, 100);
 camera.position.z = 1;
 
 // Initialize the food
-// let foodCount = cities.length;
-// let foodData = new Float32Array(foodCount * 4);
-
-// for (let i = 0; i < foodCount; i++) {
-//   const pixel = coordToPixel(cities[i].coordinates, w, h);
-//   let id = i * 4;
-//   foodData[id++] = pixel[0];
-//   foodData[id++] = pixel[1];
-//   foodData[id++] = 1;
-//   foodData[id++] = 1;
-// }
-
-// Initialize the food
 let foodUVs = cities.map((city) => {
   return coordToUV(city.coordinates, w, h);
 });
-console.log(foodUVs);
 
-function isUVEqual(a, b, epsilon = 0.005) {
+function isUVEqual(a, b, epsilon = 0.01) {
   const distance = Math.sqrt(
     Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2),
   );
@@ -102,9 +88,6 @@ for (let i = 0; i < count; i++) {
     foodData[id++] = 0;
   }
 }
-
-console.log(ptexdata);
-console.log(foodData);
 
 // Create the shader for diffusion and decay
 let diffuse_decay = new ShaderMaterial({
@@ -184,14 +167,13 @@ function update() {
   food.render(renderer, time);
 
   // Update the agents
-  // agents.material.uniforms.data.value = trails.texture;
   agents.material.uniforms.data.value = trails.texture;
-  agents.material.uniforms.foodData.value = foodData;
+  agents.material.uniforms.foodData.value = food.texture;
   agents.render(renderer, time);
 
   // Render the agents
-  // render.material.uniforms.input_texture.value = food.texture;
   render.material.uniforms.input_texture.value = agents.texture;
+  // render.material.uniforms.input_texture.value = food.texture;
   render.render(renderer, time);
 
   // Apply post processing
