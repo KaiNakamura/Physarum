@@ -38,7 +38,7 @@ for (let city of cities) {
 
 // Get the radius for a city
 const getCityRadius = (city) => {
-  let area = 0.001 + 0.01 * (city.population / totalPopulation);
+  let area = 0.001 + 0.005 * (city.population / totalPopulation);
   return Math.sqrt(area / Math.PI);
 };
 

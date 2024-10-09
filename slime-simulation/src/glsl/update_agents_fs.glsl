@@ -32,7 +32,7 @@ float getFoodValue(vec2 uv) {
 }
 
 float getSensorValue(vec2 uv) {
-  return getTrailValue(uv) + 10. * getFoodValue(uv);
+  return getTrailValue(uv) + 2. * getFoodValue(uv);
 }
 
 varying vec2 vUv;
