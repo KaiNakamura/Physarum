@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.widgets import CheckButtons, Slider
+import json
 
 matplotlib.use("TkAgg")
 
@@ -19,6 +20,17 @@ class City:
 
     def get_integer_coordinates(self):
         return (int(self.coordinates.latitude), int(self.coordinates.longitude))
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "population": self.population,
+            "coordinates": {
+                "latitude": self.coordinates.latitude,
+                "longitude": self.coordinates.longitude,
+            },
+            "size": self.size,
+        }
 
 
 cities = [
@@ -186,3 +198,10 @@ if __name__ == "__main__":
 
     # Plot the cities on the map
     plot_cities_on_map(cities, map_image_path)
+
+    # Convert the list of City instances to a list of dictionaries
+    cities_dict = [city.to_dict() for city in cities]
+
+    # Serialize the list of dictionaries to JSON
+    with open("slime-simulation/cities.json", "w") as f:
+        json.dump(cities_dict, f, indent=4)
