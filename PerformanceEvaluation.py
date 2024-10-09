@@ -1,19 +1,15 @@
 import random
 import heapq
+from map import Map
+from city import City
+from geopy.point import Point
+from geopy.distance import distance as geopy_distance
+from tabulate import tabulate
+import math
 
 class Graph:
     """A graph connects nodes (vertices) by edges (links). Each edge can also
-    have a length associated with it. The constructor call is something like:
-        g = Graph({'A': {'B': 1, 'C': 2})
-    this makes a graph with 3 nodes, A, B, and C, with an edge of length 1 from
-    A to B,  and an edge of length 2 from A to C. You can also do:
-        g = Graph({'A': {'B': 1, 'C': 2}, directed=False)
-    This makes an undirected graph, so inverse links are also added. The graph
-    stays undirected; if you add more links with g.connect('B', 'C', 3), then
-    inverse link is also added. You can use g.nodes() to get a list of nodes,
-    g.get('A') to get a dict of links out of A, and g.get('A', 'B') to get the
-    length of the link from A to B. 'Lengths' can actually be any object at
-    all, and nodes can be any hashable object."""
+    have a length associated with it."""
 
     def __init__(self, graph_dict=None, directed=True):
         self.graph_dict = graph_dict or {}
@@ -39,9 +35,7 @@ class Graph:
         self.graph_dict.setdefault(A, {})[B] = distance
 
     def get(self, a, b=None):
-        """Return a link distance or a dict of {node: distance} entries.
-        .get(a,b) returns the distance or None;
-        .get(a) returns a dict of {node: distance} entries, possibly {}."""
+        """Return a link distance or a dict of {node: distance} entries."""
         links = self.graph_dict.setdefault(a, {})
         if b is None:
             return links
@@ -50,35 +44,32 @@ class Graph:
 
     def nodes(self):
         """Return a list of nodes in the graph."""
-        s1 = set([k for k in self.graph_dict.keys()])
-        s2 = set([k2 for v in self.graph_dict.values() for k2, v2 in v.items()])
+        s1 = set(self.graph_dict.keys())
+        s2 = set(k for v in self.graph_dict.values() for k in v.keys())
         nodes = s1.union(s2)
         return list(nodes)
-
 
 def UndirectedGraph(graph_dict=None):
     """Build a Graph where every edge (including future ones) goes both ways."""
     return Graph(graph_dict=graph_dict, directed=False)
 
-
-def create_massachusetts_graph():
-    """Create a sample graph representing major cities in Massachusetts."""
-    g = UndirectedGraph()
-    g.connect('Boston', 'Cambridge', 3)
-    g.connect('Boston', 'Quincy', 10)
-    g.connect('Boston', 'Worcester', 40)
-    g.connect('Boston', 'Lynn', 12)
-    g.connect('Boston', 'Brockton', 25)
-    g.connect('Cambridge', 'Lowell', 25)
-    g.connect('Lowell', 'Lawrence', 10)
-    g.connect('Worcester', 'Springfield', 52)
-    g.connect('Worcester', 'Lowell', 50)
-    g.connect('Springfield', 'Chicopee', 5)
-    g.connect('Quincy', 'Brockton', 15)
-    g.connect('Brockton', 'Fall River', 35)
-    g.connect('Fall River', 'New Bedford', 15)
-    g.connect('New Bedford', 'Brockton', 30)
-    return g
+def build_graph_from_cities(cities, k=2):
+    """Build a graph by connecting each city to its k nearest neighbors."""
+    graph = UndirectedGraph()
+    for city in cities:
+        distances = []
+        for other_city in cities:
+            if other_city != city:
+                dist = geopy_distance(city.coordinates, other_city.coordinates).kilometers
+                distances.append((other_city.name, dist))
+        # Sort distances
+        distances.sort(key=lambda x: x[1])
+        # Get k nearest neighbors
+        nearest_neighbors = distances[:k]
+        # Connect to k nearest neighbors
+        for neighbor_name, dist in nearest_neighbors:
+            graph.connect(city.name, neighbor_name, dist)
+    return graph
 
 def total_network_length(graph):
     """Calculate the total length of all edges in the network."""
@@ -98,7 +89,7 @@ def dijkstra(graph, start):
     distances[start] = 0
     priority_queue = [(0, start)]
     while priority_queue:
-        (current_distance, current_node) = heapq.heappop(priority_queue)
+        current_distance, current_node = heapq.heappop(priority_queue)
         if current_distance > distances[current_node]:
             continue
         for neighbor, weight in graph.get(current_node).items():
@@ -124,7 +115,7 @@ def average_shortest_path_length(graph):
             if distance < float('inf'):
                 total_distance += distance
                 num_pairs += 1
-    average_distance = total_distance / num_pairs if num_pairs > 0 else 0
+    average_distance = total_distance / num_pairs if num_pairs > 0 else float('inf')
     return average_distance
 
 def get_edges(graph):
@@ -136,53 +127,130 @@ def get_edges(graph):
             edges.add(edge)
     return list(edges)
 
-def is_connected(graph):
-    """Check if the graph is connected."""
-    start_node = next(iter(graph.nodes()))
+def get_connected_components(graph):
+    """Get the list of connected components in the graph."""
     visited = set()
-    stack = [start_node]
-    while stack:
-        node = stack.pop()
-        if node not in visited:
-            visited.add(node)
-            neighbors = graph.get(node).keys()
-            stack.extend(neighbors)
-    return len(visited) == len(graph.nodes())
+    nodes = set(graph.nodes())
+    components = []
+    while nodes:
+        start_node = nodes.pop()
+        stack = [start_node]
+        component = set()
+        while stack:
+            node = stack.pop()
+            if node not in visited:
+                visited.add(node)
+                component.add(node)
+                neighbors = graph.get(node).keys()
+                for neighbor in neighbors:
+                    if neighbor not in visited:
+                        stack.append(neighbor)
+        components.append(component)
+        nodes -= component
+    return components
 
-def fault_tolerance_analysis(graph):
-    """Analyze the effect of removing each edge on the average shortest path length."""
+def fault_tolerance_metric(graph, city_populations, total_population):
+    """Compute the fault tolerance metric as specified."""
     edges = get_edges(graph)
-    results = []
+    fault_metrics = []
+    num_edges = len(edges)
     for edge in edges:
         node_a, node_b = edge
         # Remove edge
         original_distance = graph.get(node_a)[node_b]
         del graph.graph_dict[node_a][node_b]
         del graph.graph_dict[node_b][node_a]
-        # Check if the graph is connected
-        if is_connected(graph):
-            # Recompute average shortest path length
-            new_average = average_shortest_path_length(graph)
-            results.append((edge, new_average))
+        # Get connected components
+        connected_components = get_connected_components(graph)
+        # Map each city to its connected component
+        city_to_component = {}
+        for component in connected_components:
+            for city in component:
+                city_to_component[city] = component
+        # Compute the proportion of the population that each city can reach
+        proportions = []
+        for city in graph.nodes():
+            component = city_to_component[city]
+            component_population = sum(city_populations[member] for member in component)
+            proportion = component_population / total_population
+            proportions.append(proportion)
+        # Compute the average of these proportions
+        average_proportion = sum(proportions) / len(proportions)
+        # Compute average shortest path length in the largest connected component
+        largest_component = max(connected_components, key=len)
+        subgraph = subgraph_induced(graph, largest_component)
+        avg_shortest_path = average_shortest_path_length(subgraph)
+        # Compute fault tolerance metric
+        if average_proportion > 0:
+            fault_metric = avg_shortest_path / math.sqrt(average_proportion)
         else:
-            results.append((edge, float('inf')))  # Indicate that graph is disconnected
+            fault_metric = float('inf')
+        fault_metrics.append(fault_metric)
         # Restore edge
         graph.connect(node_a, node_b, original_distance)
-    return results
+    # Compute the average of fault metrics
+    fault_tolerance_value = sum(fault_metrics) / num_edges if num_edges > 0 else float('inf')
+    return fault_tolerance_value
+
+def subgraph_induced(graph, nodes_set):
+    """Return the subgraph induced by nodes_set."""
+    new_graph_dict = {}
+    for node in nodes_set:
+        new_graph_dict[node] = {}
+        for neighbor, distance in graph.get(node).items():
+            if neighbor in nodes_set:
+                new_graph_dict[node][neighbor] = distance
+    new_graph = UndirectedGraph(new_graph_dict)
+    return new_graph
 
 def main():
-    graph = create_massachusetts_graph()
-    total_length = total_network_length(graph)
-    print(f"Total network length: {total_length}")
-    avg_distance = average_shortest_path_length(graph)
-    print(f"Average shortest path length: {avg_distance}")
-    fault_results = fault_tolerance_analysis(graph)
-    print("\nFault tolerance analysis:")
-    for edge, new_avg in fault_results:
-        if new_avg == float('inf'):
-            print(f"Removing edge {edge} disconnects the graph.")
-        else:
-            print(f"Removing edge {edge} increases average shortest path length to: {new_avg}")
+    # List of City objects
+    cities = [
+        City("Boston", 650706, Point("42.3601 N 71.0589 W")),
+        City("Worcester", 205319, Point("42.2626 N 71.8023 W")),
+        City("Springfield", 153337, Point("42.1015 N 72.5898 W")),
+        City("Cambridge", 119008, Point("42.3736 N 71.1097 W")),
+        City("Lowell", 114401, Point("42.6334 N 71.3162 W")),
+        City("Brockton", 104889, Point("42.0834 N 71.0184 W")),
+        City("New Bedford", 100757, Point("41.6362 N 70.9342 W")),
+        City("Quincy", 101380, Point("42.2529 N 71.0023 W")),
+        City("Lynn", 101603, Point("42.4668 N 70.9495 W")),
+        City("Fall River", 94044, Point("41.7015 N 71.1550 W")),
+    ]
+    # Create a mapping from city names to populations
+    city_populations = {city.name: city.population for city in cities}
+    total_population = sum(city_populations.values())
+    # Build the graphs from cities
+    two_graph = build_graph_from_cities(cities, k=2)
+    three_graph = build_graph_from_cities(cities, k=3)
+
+    # Calculate metrics for both graphs
+    metrics = {
+        'Total Network Length (km)': {
+            '2-Nearest Neighbors': total_network_length(two_graph),
+            '3-Nearest Neighbors': total_network_length(three_graph)
+        },
+        'Average Shortest Path Length (km)': {
+            '2-Nearest Neighbors': average_shortest_path_length(two_graph),
+            '3-Nearest Neighbors': average_shortest_path_length(three_graph)
+        },
+        'Fault Tolerance Metric': {
+            '2-Nearest Neighbors': fault_tolerance_metric(two_graph, city_populations, total_population),
+            '3-Nearest Neighbors': fault_tolerance_metric(three_graph, city_populations, total_population)
+        }
+    }
+
+    # Prepare data for tabulate
+    table = []
+    for metric_name, values in metrics.items():
+        value_two = f"{values['2-Nearest Neighbors']:.2f}"
+        value_three = f"{values['3-Nearest Neighbors']:.2f}"
+        table.append([metric_name, value_two, value_three])
+
+    # Print the table using tabulate
+    headers = ['Metric', '2-Nearest Neighbors', '3-Nearest Neighbors']
+    print("\nComparison of Graphs with 2 and 3 Nearest Neighbors:")
+    print(tabulate(table, headers=headers, tablefmt="github"))
 
 if __name__ == "__main__":
     main()
