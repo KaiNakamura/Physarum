@@ -31,17 +31,35 @@ const scene = new Scene();
 const camera = new OrthographicCamera(-w / 2, w / 2, h / 2, -h / 2, 0.1, 100);
 camera.position.z = 1;
 
-// Initialize the food
-let foodUVs = cities.map((city) => {
-  return coordToUV(city.coordinates, w, h);
-});
-
-function isUVEqual(a, b, epsilon = 0.01) {
-  const distance = Math.sqrt(
-    Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2),
-  );
-  return distance < epsilon;
+let totalPopulation = 0;
+for (let city of cities) {
+  totalPopulation += city.population;
 }
+
+// Get the radius for a city
+const getCityRadius = (city) => {
+  let area = 0.001 + 0.01 * (city.population / totalPopulation);
+  return Math.sqrt(area / Math.PI);
+};
+
+// Returns the food value for a given position
+const getFoodvalue = (u, v) => {
+  let foodValue = 0;
+
+  for (const city of cities) {
+    const cityUV = coordToUV(city.coordinates, w, h);
+    const cityRadius = getCityRadius(city);
+    const distance = Math.sqrt((u - cityUV[0]) ** 2 + (v - cityUV[1]) ** 2);
+
+    const sigma = cityRadius / 3.0; // Standard deviation
+    if (distance < cityRadius) {
+      const gaussianValue = Math.exp(-(distance ** 2) / (2 * sigma ** 2));
+      foodValue += gaussianValue;
+    }
+  }
+
+  return Math.min(1, foodValue);
+};
 
 // Initialize the agents
 let size = 512; // Particle amount = (size ^ 2)
@@ -75,22 +93,14 @@ for (let i = 0; i < count; i++) {
 
   // Check if the current uv is at a food uv
   id = i * 4;
-  if (foodUVs.some((uv) => isUVEqual(uv, [u, v]))) {
-    console.log("Found a food uv at", u, v);
-    foodData[id++] = u;
-    foodData[id++] = v;
-    foodData[id++] = 1;
-    foodData[id++] = 1;
-  } else {
-    foodData[id++] = u;
-    foodData[id++] = v;
-    foodData[id++] = 0;
-    foodData[id++] = 0;
-  }
+  foodData[id++] = u;
+  foodData[id++] = v;
+  foodData[id++] = getFoodvalue(u, v);
+  foodData[id++] = 1;
 }
 
 // Create the shader for diffusion and decay
-let diffuse_decay = new ShaderMaterial({
+let diffuse_decay_shader = new ShaderMaterial({
   uniforms: {
     points: { value: null },
     decay: { value: 0.9 },
@@ -98,56 +108,64 @@ let diffuse_decay = new ShaderMaterial({
   vertexShader: require("./src/glsl/quad_vs.glsl"),
   fragmentShader: require("./src/glsl/diffuse_decay_fs.glsl"),
 });
-let trails = new PingpongRenderTarget(w, h, diffuse_decay);
+let diffuse_decay = new PingpongRenderTarget(w, h, diffuse_decay_shader);
 
 // Create the shader for food
-let update_food = new ShaderMaterial({
+let food_shader = new ShaderMaterial({
   uniforms: {
     data: { value: null },
   },
   vertexShader: require("./src/glsl/quad_vs.glsl"),
   fragmentShader: require("./src/glsl/food_fs.glsl"),
 });
-let food = new PingpongRenderTarget(size, size, update_food, foodData);
+let food = new PingpongRenderTarget(size, size, food_shader, foodData);
 
 // Create the shader for moving the agents
-let update_agents = new ShaderMaterial({
+let update_agents_shader = new ShaderMaterial({
   uniforms: {
     data: { value: null },
     foodData: { value: null },
     sa: { value: 2 },
     ra: { value: 4 },
     so: { value: 12 },
-    ss: { value: 1.1 },
+    ss: { value: 2 },
   },
   vertexShader: require("./src/glsl/quad_vs.glsl"),
   fragmentShader: require("./src/glsl/update_agents_fs.glsl"),
 });
-let agents = new PingpongRenderTarget(size, size, update_agents, ptexdata);
+let update_agents = new PingpongRenderTarget(
+  size,
+  size,
+  update_agents_shader,
+  ptexdata,
+);
 
 // Create the shader for rendering the agents
-let render_agents = new ShaderMaterial({
+let render_agents_shader = new ShaderMaterial({
   vertexShader: require("./src/glsl/render_agents_vs.glsl"),
   fragmentShader: require("./src/glsl/render_agents_fs.glsl"),
 });
-let render = new RenderTarget(w, h, render_agents, pos, uvs);
+let render_agents = new RenderTarget(w, h, render_agents_shader, pos, uvs);
 
 // Create the shader for the post processing step
-let postprocess = new ShaderMaterial({
+let post_process_shader = new ShaderMaterial({
   uniforms: {
     data: {
       value: null,
     },
+    foodData: {
+      value: null,
+    },
   },
   vertexShader: require("./src/glsl/quad_vs.glsl"),
-  fragmentShader: require("./src/glsl/postprocess_fs.glsl"),
+  fragmentShader: require("./src/glsl/post_process_fs.glsl"),
 });
-let postprocess_mesh = new Mesh(new PlaneBufferGeometry(), postprocess);
-postprocess_mesh.scale.set(w, h, 1);
-scene.add(postprocess_mesh);
+let post_process = new Mesh(new PlaneBufferGeometry(), post_process_shader);
+post_process.scale.set(w, h, 1);
+scene.add(post_process);
 
 // Create a new controls object
-let controls = new Controls(renderer, agents);
+let controls = new Controls(renderer, update_agents);
 controls.count = ~~(size * size * 0.05);
 
 // Main update loop
@@ -158,26 +176,27 @@ function update() {
   time = (Date.now() - start) * 0.001;
 
   // Update the trails
-  trails.material.uniforms.points.value = render.texture;
-  trails.render(renderer, time);
+  diffuse_decay.material.uniforms.points.value = render_agents.texture;
+  diffuse_decay.render(renderer, time);
 
   // Update the food
-  food.material.uniforms.input_texture.value = trails.texture;
+  food.material.uniforms.input_texture.value = diffuse_decay.texture;
   food.material.uniforms.data.value = foodData;
   food.render(renderer, time);
 
   // Update the agents
-  agents.material.uniforms.data.value = trails.texture;
-  agents.material.uniforms.foodData.value = food.texture;
-  agents.render(renderer, time);
+  update_agents.material.uniforms.data.value = diffuse_decay.texture;
+  update_agents.material.uniforms.foodData.value = food.texture;
+  update_agents.render(renderer, time);
 
   // Render the agents
-  render.material.uniforms.input_texture.value = agents.texture;
-  // render.material.uniforms.input_texture.value = food.texture;
-  render.render(renderer, time);
+  render_agents.material.uniforms.input_texture.value = update_agents.texture;
+  // render_agents.material.uniforms.input_texture.value = food.texture;
+  render_agents.render(renderer, time);
 
   // Apply post processing
-  postprocess_mesh.material.uniforms.data.value = trails.texture;
+  post_process.material.uniforms.data.value = diffuse_decay.texture;
+  post_process.material.uniforms.foodData.value = food.texture;
 
   // Render the scene
   renderer.setSize(w, h);
@@ -185,7 +204,11 @@ function update() {
   renderer.render(scene, camera);
 }
 
-let materials = [diffuse_decay, update_agents, render_agents];
+let materials = [
+  diffuse_decay_shader,
+  update_agents_shader,
+  render_agents_shader,
+];
 let resolution = new Vector2(w, h);
 materials.forEach((mat) => {
   mat.uniforms.resolution.value = resolution;
@@ -198,11 +221,21 @@ update();
 
 // GUI Settings
 let gui = new dat.GUI();
-gui.add(diffuse_decay.uniforms.decay, "value", 0.01, 0.99, 0.01).name("Decay");
-gui.add(update_agents.uniforms.sa, "value", 1, 90, 0.1).name("Sensor Angle");
-gui.add(update_agents.uniforms.ra, "value", 1, 90, 0.1).name("Rotation Angle");
-gui.add(update_agents.uniforms.so, "value", 1, 90, 0.1).name("Sensor Offset");
-gui.add(update_agents.uniforms.ss, "value", 0.1, 10, 0.1).name("Step Size");
+gui
+  .add(diffuse_decay_shader.uniforms.decay, "value", 0.01, 0.99, 0.01)
+  .name("Decay");
+gui
+  .add(update_agents_shader.uniforms.sa, "value", 1, 90, 0.1)
+  .name("Sensor Angle");
+gui
+  .add(update_agents_shader.uniforms.ra, "value", 1, 90, 0.1)
+  .name("Rotation Angle");
+gui
+  .add(update_agents_shader.uniforms.so, "value", 1, 90, 0.1)
+  .name("Sensor Offset");
+gui
+  .add(update_agents_shader.uniforms.ss, "value", 0.1, 10, 0.1)
+  .name("Step Size");
 gui.add(controls, "random");
 gui.add(controls, "radius", 0.001, 0.25);
 gui.add(controls, "count", 1, size * size, 1);

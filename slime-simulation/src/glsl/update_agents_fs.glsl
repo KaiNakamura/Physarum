@@ -32,7 +32,7 @@ float getFoodValue(vec2 uv) {
 }
 
 float getSensorValue(vec2 uv) {
-  return getTrailValue(uv) + 100. * getFoodValue(uv);
+  return getTrailValue(uv) + 10. * getFoodValue(uv);
 }
 
 varying vec2 vUv;
@@ -97,13 +97,13 @@ void main() {
   val.xy += offset;
 
   // Move only if the destination is free
-  if (getDataValue(val.xy) == 1.) {
-    val.xy = src.xy;
-    angle = rand(val.xy + time) * PI2;
-  }
+  // if (getDataValue(val.xy) == 1.) {
+  //   val.xy = src.xy;
+  //   angle = rand(val.xy + time) * PI2;
+  // }
 
   // Wraps the coordinates so they remains in the [0-1] interval
-  val.xy = fract(val.xy);
+  // val.xy = fract(val.xy);
 
   // Converts the angle back to [0-1]
   val.z = (angle / PI2);
