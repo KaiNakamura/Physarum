@@ -1,18 +1,18 @@
+import dat from "dat.gui";
 import "file-loader?name=[name].[ext]!./src/html/index.html";
 import {
-  Scene,
-  OrthographicCamera,
-  WebGLRenderer,
   Mesh,
+  OrthographicCamera,
   PlaneBufferGeometry,
+  Scene,
   ShaderMaterial,
   Vector2,
+  WebGLRenderer,
 } from "three";
+import { cities, coordToUV } from "./src/City";
+import Controls from "./src/Controls";
 import PingpongRenderTarget from "./src/PingpongRenderTarget";
 import RenderTarget from "./src/RenderTarget";
-import { City, Point, cities, coordToPixel, coordToUV } from "./src/City";
-import dat from "dat.gui";
-import Controls from "./src/Controls";
 
 // Define window width and height
 let minDim = Math.min(window.innerWidth, window.innerHeight);
@@ -225,17 +225,15 @@ gui
   .add(diffuse_decay_shader.uniforms.decay, "value", 0.01, 0.99, 0.01)
   .name("Decay");
 gui
-  .add(update_agents_shader.uniforms.sa, "value", 1, 90, 0.1)
+  .add(update_agents_shader.uniforms.sa, "value", 1, 45, 0.1)
   .name("Sensor Angle");
 gui
-  .add(update_agents_shader.uniforms.ra, "value", 1, 90, 0.1)
+  .add(update_agents_shader.uniforms.ra, "value", 1, 45, 0.1)
   .name("Rotation Angle");
 gui
-  .add(update_agents_shader.uniforms.so, "value", 1, 90, 0.1)
+  .add(update_agents_shader.uniforms.so, "value", 1, 50, 0.1)
   .name("Sensor Offset");
 gui
   .add(update_agents_shader.uniforms.ss, "value", 0.1, 10, 0.1)
   .name("Step Size");
 gui.add(controls, "random");
-gui.add(controls, "radius", 0.001, 0.25);
-gui.add(controls, "count", 1, size * size, 1);

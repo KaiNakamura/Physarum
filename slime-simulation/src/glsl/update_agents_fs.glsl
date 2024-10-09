@@ -51,16 +51,6 @@ void main() {
   vec4 src = texture2D(input_texture, vUv);
   vec4 val = src;
 
-  // Uncomment to see food
-  // if (getFoodValue(val.xy) > 0.9) {
-  //   gl_FragColor = val;
-  //   return;
-  // }
-  // else {
-  //   gl_FragColor = vec4(0., 0., 0., 1.);
-  //   return;
-  // }
-  
   // Agent's heading 
   float angle = val.z * PI2;
 
