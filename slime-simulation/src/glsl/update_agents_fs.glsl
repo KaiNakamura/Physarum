@@ -78,25 +78,46 @@ void main() {
   else if (left < right) {
     angle += RA;
   }
-  else if (left > right){
+  else if (left > right) {
     angle -= RA;
   }
 
+  // Calculate speed factor
+  float speedFactor = clamp(1. - getFoodValue(val.xy), 0.3, 1.);
+
   // Move forward
-  vec2 offset = vec2(cos(angle), sin(angle)) * SS;
+  vec2 offset = vec2(cos(angle), sin(angle)) * SS * speedFactor;
   val.xy += offset;
 
   // Move only if the destination is free
-  // if (getDataValue(val.xy) == 1.) {
-  //   val.xy = src.xy;
-  //   angle = rand(val.xy + time) * PI2;
-  // }
+  if (getDataValue(val.xy) == 1.) {
+    val.xy = src.xy;
+    angle = rand(val.xy + time) * PI2;
+  }
 
-  // Wraps the coordinates so they remains in the [0-1] interval
-  // val.xy = fract(val.xy);
+  // Define the center and radius of the circle
+  vec2 circleCenter = vec2(0.5, 0.5);
+  float radius = 0.45;
+
+  // Calculate the distance from the center of the circle
+  vec2 toCenter = val.xy - circleCenter;
+  float slimeDistance = length(toCenter);
+
+  // Check if the slime is outside the circle
+  if (slimeDistance > radius) {
+    // Calculate the normal vector at the point of collision
+    vec2 normal = normalize(toCenter);
+
+    // Reflect the angle around the normal
+    float dotProduct = dot(vec2(cos(angle), sin(angle)), normal);
+    angle = angle - 2.0 * dotProduct * atan(normal.y, normal.x);
+
+    // Ensure the position is within the circle
+    val.xy = center + normal * radius;
+  }
 
   // Converts the angle back to [0-1]
   val.z = (angle / PI2);
-  
+
   gl_FragColor = val;
 }

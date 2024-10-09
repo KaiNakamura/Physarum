@@ -128,7 +128,7 @@ let update_agents_shader = new ShaderMaterial({
     sa: { value: 2 },
     ra: { value: 4 },
     so: { value: 12 },
-    ss: { value: 2 },
+    ss: { value: 1 },
   },
   vertexShader: require("./src/glsl/quad_vs.glsl"),
   fragmentShader: require("./src/glsl/update_agents_fs.glsl"),
