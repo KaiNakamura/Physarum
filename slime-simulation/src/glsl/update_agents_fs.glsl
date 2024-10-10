@@ -83,7 +83,7 @@ void main() {
   }
 
   // Calculate speed factor
-  float speedFactor = clamp(1. - getFoodValue(val.xy), 0.3, 1.);
+  float speedFactor = clamp(1. - getFoodValue(val.xy), 0.5, 1.);
 
   // Move forward
   vec2 offset = vec2(cos(angle), sin(angle)) * SS * speedFactor;

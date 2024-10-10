@@ -1,6 +1,7 @@
 import { Vector2 } from "three";
-let isDown = false;
+
 let pid = 0;
+
 export default class Controls {
   constructor(renderer, agents) {
     this.renderer = renderer;
@@ -9,34 +10,6 @@ export default class Controls {
 
     this.radius = 0.025;
     this.count = 50;
-
-    let container = renderer.domElement;
-    container.addEventListener("mouseup", this.onUp.bind(this));
-    container.addEventListener("mousedown", this.onDown.bind(this));
-    container.addEventListener("mousemove", this.onMove.bind(this));
-    container.addEventListener("dblclick", this.onDoubleClick.bind(this));
-  }
-
-  onDown(e) {
-    isDown = true;
-    this.addParticles(e);
-  }
-
-  onDoubleClick(e) {
-    let c = this.count;
-    this.count = -1;
-    this.addParticles(e);
-    this.count = c;
-  }
-
-  onUp(e) {
-    isDown = false;
-  }
-
-  onMove(e) {
-    if (isDown) {
-      this.addParticles(e, 50);
-    }
   }
 
   addParticles(e) {
@@ -70,7 +43,11 @@ export default class Controls {
     this.renderer.copyTextureToTexture(new Vector2(0, 0), tex, tex);
   }
 
-  random() {
+  Randomize() {
+    const centerX = 0.5;
+    const centerY = 0.5;
+    const maxRadius = 0.4;
+
     pid = 0;
     let tex = this.agents.texture;
     let arr = tex.image.data;
@@ -78,8 +55,12 @@ export default class Controls {
     let id;
     for (let i = 0; i < max; i++) {
       id = i * 4;
-      arr[id++] = Math.random();
-      arr[id++] = Math.random();
+      const angle = Math.random() * 2 * Math.PI; // Random angle between 0 and 2*PI
+      const radius = Math.random() * maxRadius; // Random radius between 0 and maxRadius
+      const posX = centerX + radius * Math.cos(angle); // Convert polar to Cartesian x
+      const posY = centerY + radius * Math.sin(angle); // Convert polar to Cartesian y
+      arr[id++] = posX;
+      arr[id++] = posY;
       arr[id++] = Math.random();
     }
     this.renderer.copyTextureToTexture(new Vector2(0, 0), tex, tex);

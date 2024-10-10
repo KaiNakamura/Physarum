@@ -72,6 +72,9 @@ let foodData = new Float32Array(count * 4);
 let id = 0,
   u,
   v;
+const centerX = 0.5;
+const centerY = 0.5;
+const maxRadius = 0.4;
 for (let i = 0; i < count; i++) {
   // Point cloud vertex
   id = i * 3;
@@ -86,8 +89,12 @@ for (let i = 0; i < count; i++) {
 
   // Particle texture values (agents)
   id = i * 4;
-  ptexdata[id++] = Math.random(); // Normalized pos x
-  ptexdata[id++] = Math.random(); // Normalized pos y
+  const angle = Math.random() * 2 * Math.PI; // Random angle between 0 and 2*PI
+  const radius = Math.random() * maxRadius; // Random radius between 0 and maxRadius
+  const posX = centerX + radius * Math.cos(angle); // Convert polar to Cartesian x
+  const posY = centerY + radius * Math.sin(angle); // Convert polar to Cartesian y
+  ptexdata[id++] = posX;
+  ptexdata[id++] = posY;
   ptexdata[id++] = Math.random(); // Normalized angle
   ptexdata[id++] = 1;
 
@@ -104,6 +111,7 @@ let diffuse_decay_shader = new ShaderMaterial({
   uniforms: {
     points: { value: null },
     decay: { value: 0.9 },
+    blur: { value: 3 },
   },
   vertexShader: require("./src/glsl/quad_vs.glsl"),
   fragmentShader: require("./src/glsl/diffuse_decay_fs.glsl"),
@@ -224,6 +232,7 @@ let gui = new dat.GUI();
 gui
   .add(diffuse_decay_shader.uniforms.decay, "value", 0.01, 0.99, 0.01)
   .name("Decay");
+gui.add(diffuse_decay_shader.uniforms.blur, "value", 1, 10, 1).name("Blur");
 gui
   .add(update_agents_shader.uniforms.sa, "value", 1, 45, 0.1)
   .name("Sensor Angle");
@@ -236,4 +245,4 @@ gui
 gui
   .add(update_agents_shader.uniforms.ss, "value", 0.1, 10, 0.1)
   .name("Step Size");
-gui.add(controls, "random");
+gui.add(controls, "Randomize");

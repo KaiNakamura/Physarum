@@ -61,8 +61,8 @@ function coordToPixel(coord, width, height) {
 }
 
 function coordToUV(coord) {
-  const u = interp(coord.latitude, latMin, latMax, 0, 1);
-  const v = interp(coord.longitude, lonMin, lonMax, 0, 1);
+  const v = interp(coord.latitude, latMin, latMax, 0, 1);
+  const u = interp(coord.longitude, lonMin, lonMax, 0, 1);
 
   return [u, v];
 }
