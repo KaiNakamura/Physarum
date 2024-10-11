@@ -1,0 +1,24 @@
+{
+  "name": "slime-simulation",
+  "version": "1.0.0",
+  "description": "Slime Simulation",
+  "main": "index.js",
+  "dependencies": {
+    "physarum": "file:",
+    "slime-simulation": "file:"
+  },
+  "devDependencies": {
+    "dat.gui": "0.7.5",
+    "file-loader": "^3.0.1",
+    "prettier": "^3.3.3",
+    "raw-loader": "^1.0.0",
+    "three": "0.102.1",
+    "webpack": "^4.29.0",
+    "webpack-cli": "^3.1.0",
+    "webpack-dev-server": "^3.1.8"
+  },
+  "scripts": {
+    "dev": "set NODE_OPTIONS=--openssl-legacy-provider && webpack && webpack-dev-server",
+    "deploy": "webpack -p --config webpack.config.js"
+  }
+}

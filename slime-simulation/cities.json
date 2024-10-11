@@ -1,0 +1,92 @@
+[
+    {
+        "name": "Boston",
+        "population": 650706,
+        "coordinates": {
+            "latitude": 42.3601,
+            "longitude": -71.0589
+        },
+        "size": 37.280256484882926
+    },
+    {
+        "name": "Worcester",
+        "population": 205319,
+        "coordinates": {
+            "latitude": 42.2626,
+            "longitude": -71.8023
+        },
+        "size": 11.76313877729678
+    },
+    {
+        "name": "Springfield",
+        "population": 153337,
+        "coordinates": {
+            "latitude": 42.1015,
+            "longitude": -72.5898
+        },
+        "size": 8.78498536761993
+    },
+    {
+        "name": "Cambridge",
+        "population": 119008,
+        "coordinates": {
+            "latitude": 42.3736,
+            "longitude": -71.1097
+        },
+        "size": 6.8182078600058205
+    },
+    {
+        "name": "Lowell",
+        "population": 114401,
+        "coordinates": {
+            "latitude": 42.6334,
+            "longitude": -71.3162
+        },
+        "size": 6.554263557008991
+    },
+    {
+        "name": "Brockton",
+        "population": 104889,
+        "coordinates": {
+            "latitude": 42.0834,
+            "longitude": -71.0184
+        },
+        "size": 6.009301931199168
+    },
+    {
+        "name": "New Bedford",
+        "population": 100757,
+        "coordinates": {
+            "latitude": 41.6362,
+            "longitude": -70.9342
+        },
+        "size": 5.772571334285145
+    },
+    {
+        "name": "Quincy",
+        "population": 101380,
+        "coordinates": {
+            "latitude": 42.2529,
+            "longitude": -71.0023
+        },
+        "size": 5.808264258263227
+    },
+    {
+        "name": "Lynn",
+        "population": 101603,
+        "coordinates": {
+            "latitude": 42.4668,
+            "longitude": -70.9495
+        },
+        "size": 5.821040377118945
+    },
+    {
+        "name": "Fall River",
+        "population": 94044,
+        "coordinates": {
+            "latitude": 41.7015,
+            "longitude": -71.155
+        },
+        "size": 5.387970052319066
+    }
+]

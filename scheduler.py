@@ -42,7 +42,7 @@ class Scheduler:
                     plt.savefig("sim_t{}.png".format(i))
                     plt.clf()
 
-        elif animate == True:
+        if animate == True:
             # this can take a while for large environments, high population
             # also generates very large .gif files, play with values to get smaller files
             ims = []
