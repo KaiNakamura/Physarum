@@ -7,7 +7,7 @@ import networkx as nx
 from search import UndirectedGraph
 
 # open an example image as black and white
-image = ski.io.imread("Figure_1.PNG", as_gray=True)
+image = ski.io.imread("Figure_2.PNG", as_gray=True)
 # image = ski.io.imread("output.PNG", as_gray=True
 
 # convert all grey to black
@@ -26,162 +26,99 @@ skeleton = skeletonize(image)
 # make nodes from junctions and terminals
 G = nx.Graph()
 
-neighbors = []
+# perform BFS to construct the graph
+visited = set()
 
 for i in range(skeleton.shape[0]):
     for j in range(skeleton.shape[1]):
-        if not (skeleton[i, j]):
-            continue
+        if skeleton[i, j]:
+            node = (j, i)
+            G.add_node(node, pos=node)
+            visited.add(node)
 
-        num_neighbors = 0
+            for direction in [
+                (1, 0),
+                (0, 1),
+                (-1, 0),
+                (0, -1),
+                (1, 1),
+                (-1, 1),
+                (1, -1),
+                (-1, -1),
+            ]:
+                new_node = (node[0] + direction[0], node[1] + direction[1])
 
-        for direction in [
-            (0, 1),
-            (0, -1),
-            (1, 0),
-            (-1, 0),
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        ]:
-            new_i = i + direction[0]
-            new_j = j + direction[1]
+                if new_node in visited:
+                    G.add_edge(node, new_node)
 
+
+print("Number of nodes:", len(G.nodes()))
+# # While there are nodes that are not branchpoints/endpoints
+# #     Select one of these nodes.
+# #     Merge its two edges into one by removing the node.
+
+while True:
+
+    disconnected = False
+
+    for node in list(G.nodes()):
+        # print(i, node, len(list(G.neighbors(node))))
+        # input()
+        if G.degree(node) == 0:
+            G.remove_node(node)
+
+        elif G.degree(node) == 2:
+            neighbors = list(G.neighbors(node))
+            print(neighbors)
+            G.add_edge(neighbors[0], neighbors[1])
+            G.remove_node(node)
+
+            disconnected = True
+            break
+
+    if not disconnected:
+        break
+
+
+print("Number of nodes:", len(G.nodes()))
+input()
+
+# Combine nodes less than 3 pixels apart
+
+while True:
+    disconnected = False
+    for node in list(G.nodes()):
+        for neighbor in list(G.neighbors(node)):
             if (
-                new_i < 0
-                or new_i >= skeleton.shape[0]
-                or new_j < 0
-                or new_j >= skeleton.shape[1]
+                math.sqrt((node[0] - neighbor[0]) ** 2 + (node[1] - neighbor[1]) ** 2)
+                < 3
             ):
-                continue
+                # For all neighbors of the node, add an edge between the neighbor and the neighbor of the neighbor
+                for neighbor_neighbor in list(G.neighbors(neighbor)):
+                    if neighbor_neighbor != node:
+                        G.add_edge(node, neighbor_neighbor)
+                G.remove_node(neighbor)
+                disconnected = True
+                break
 
-            if skeleton[new_i, new_j]:
-                num_neighbors += 1
+        if disconnected:
+            break
 
-        # If num neighbors is greater than 3 kill nodes until only 3 neighbors are left
-        if num_neighbors > 2:
-            neighbors.append((i, j))
-            # G.add_node((j, i), pos=(j, i), junction=True)
-
-# remove nodes that are too close to each other by bucketing with a grid size of 3
-# pick one node from each bucket
-
-join_mapping = {}  # rev coord format
-
-for i, j in neighbors:
-    # Find all neighbors with distance less than 3
-    close_neighbors = []
-    for i2, j2 in neighbors:
-        if i == i2 and j == j2:
-            continue
-
-        if math.sqrt((i - i2) ** 2 + (j - j2) ** 2) < 3:
-            close_neighbors.append((i2, j2))
-            join_mapping[(j2, i2)] = (j, i)
-            # join_mapping[(j, i)] = (j, i)
-
-    # Remove all close neighbors but prefer to keep
-    # neighbors with highest bordering neighbors
-    highest_bordering = 0
-    highest_bordering_node = None
-
-    for neighbor in close_neighbors + [(i, j)]:
-        for direction in [
-            (0, 1),
-            (0, -1),
-            (1, 0),
-            (-1, 0),
-        ]:
-            new_i = i + direction[0]
-            new_j = j + direction[1]
-
-            if skeleton[new_i, new_j]:
-                highest_bordering += 1
-                highest_bordering_node = neighbor
-
-    # remove all except the one with the highest bordering neighbors
-
-    for neighbor in close_neighbors:
-        if neighbor != highest_bordering_node:
-            neighbors.remove(neighbor)
+    if not disconnected:
+        break
 
 
-# add to graph
-for i, j in neighbors:
-    G.add_node((j, i), pos=(j, i), junction=True)
+print("Number of nodes:", len(G.nodes()))
+input()
 
+# for node in G.nodes():
+#     if len(list(G.neighbors(node))) > 2:
+#         parent = {node: None}
+#         bfs(G, skeleton, node, parent, pos=node)
+#         break
 
-def to_exploreed_string(i, j):
-    return str(i) + "." + str(j)
-
-
-# iterate over all nodes and find connections to other nodes by "walking" in the skeleton to the next junction
-for node in list(G.nodes()):
-    i, j = node
-    orig_i, orig_j = i, j
-
-    print("junction", i, j)
-
-    done = False
-    didMove = False
-    explored = set()
-
-    explored.add(to_exploreed_string(i, j))
-    reachable = []
-
-    queue = [((orig_i, orig_j), (i, j))]
-
-    # Perform BFS to find all reachable junctions
-    while queue:
-        from_node, current_node = queue.pop(0)
-
-        for direction in [
-            (0, 1),
-            (0, -1),
-            (1, 0),
-            (-1, 0),
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        ]:
-            new_i = current_node[0] + direction[0]
-            new_j = current_node[1] + direction[1]
-
-            coord_str = to_exploreed_string(new_i, new_j)
-
-            # Check bounds
-            if (
-                new_j < 0
-                or new_j >= skeleton.shape[0]
-                or new_i < 0
-                or new_i >= skeleton.shape[1]
-            ):
-                continue
-            # print("new", new_i, new_j, skeleton[new_i, new_j])
-
-            skip = False
-
-            if skeleton[new_j, new_i] and not coord_str in explored:
-                print("exploring", new_i, new_j, skeleton[new_j, new_i])
-
-                actual_node = (new_i, new_j)
-
-                # actual_node = join_mapping.get((new_i, new_j), (new_i, new_j))
-                if actual_node == from_node:
-                    continue
-
-                if G.nodes.get(actual_node, {}):
-                    print("found junction", new_i, new_j)
-                    if not G.has_edge(from_node, actual_node):
-                        G.add_edge(from_node, actual_node)
-                    explored.add(coord_str)
-                    # queue.append((actual_node, actual_node))
-                    continue
-
-                explored.add(coord_str)
-                queue.append((from_node, actual_node))
+# # remove the node
+# G.remove_node(node)
 
 
 # display results
@@ -199,7 +136,7 @@ ax[1].set_title("skeleton", fontsize=20)
 
 # draw the graph
 pos = nx.get_node_attributes(G, "pos")
-nx.draw(G, pos, ax=ax[2], node_size=20, with_labels=True, edge_color="b")
+nx.draw(G, pos, ax=ax[2], node_size=20, with_labels=False, edge_color="b")
 
 
 fig.tight_layout()
@@ -224,12 +161,12 @@ plt.show()
 # )
 
 # dump graph dict to file
-import pickle
+# import pickle
 
-with open("graph.pkl", "wb") as f:
-    pickle.dump(
-        {node: {neighbor: 1 for neighbor in G.neighbors(node)} for node in G.nodes()}, f
-    )
+# with open("graph.pkl", "wb") as f:
+#     pickle.dump(
+#         {node: {neighbor: 1 for neighbor in G.neighbors(node)} for node in G.nodes()}, f
+#     )
 
 # # Convert networkx graph to search graph
 # graph = UndirectedGraph(
