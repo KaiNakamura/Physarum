@@ -6,9 +6,12 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from pathlib import Path
 
+KEEP_THRESHOLD = 2
+NEIGHBOR_THRESHOLD = 5
+
 
 class PictureToNetwork:
-    def __init__(self, image_path):
+    def __init__(self, image_path, keep=[]):
         self.filename = Path(image_path).stem
         self.image_path = image_path
         self.image = ski.io.imread(image_path, as_gray=True)
@@ -16,6 +19,7 @@ class PictureToNetwork:
         self.skeleton = skeletonize(self.image)
         self.G = nx.Graph()
         self.visited = set()
+        self.keep = keep
 
     def _construct_graph(self):
         for i in range(self.skeleton.shape[0]):
@@ -40,11 +44,24 @@ class PictureToNetwork:
                         if new_node in self.visited:
                             self.G.add_edge(node, new_node)
 
+    def should_remove_node(self, node):
+        for keep_node in self.keep:
+            if (
+                math.sqrt((node[0] - keep_node[0]) ** 2 + (node[1] - keep_node[1]) ** 2)
+                < KEEP_THRESHOLD
+            ):
+                return False
+
+        return True
+
     def _remove_nodes(self):
         while True:
             disconnected = False
 
             for node in list(self.G.nodes()):
+                if not self.should_remove_node(node):
+                    continue
+
                 if self.G.degree(node) == 0:
                     self.G.remove_node(node)
                 elif self.G.degree(node) == 2:
@@ -67,7 +84,7 @@ class PictureToNetwork:
                         math.sqrt(
                             (node[0] - neighbor[0]) ** 2 + (node[1] - neighbor[1]) ** 2
                         )
-                        < 2
+                        < NEIGHBOR_THRESHOLD
                     ):
                         for neighbor_neighbor in list(self.G.neighbors(neighbor)):
                             if neighbor_neighbor != node:
