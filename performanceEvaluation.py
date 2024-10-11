@@ -1,11 +1,8 @@
-import random
 import heapq
-from map import Map
-from city import City
-from geopy.point import Point
-from geopy.distance import distance as geopy_distance
-from tabulate import tabulate
 import math
+import pickle
+import os
+from tabulate import tabulate
 
 class Graph:
     """A graph connects nodes (vertices) by edges (links). Each edge can also
@@ -20,11 +17,11 @@ class Graph:
     def make_undirected(self):
         """Make a digraph into an undirected graph by adding symmetric edges."""
         for a in list(self.graph_dict.keys()):
-            for (b, dist) in self.graph_dict[a].items():
+            for (b, dist) in list(self.graph_dict[a].items()):
                 self.connect1(b, a, dist)
 
     def connect(self, A, B, distance=1):
-        """Add a link from A and B of given distance, and also add the inverse
+        """Add a link from A to B of given distance, and also add the inverse
         link if the graph is undirected."""
         self.connect1(A, B, distance)
         if not self.directed:
@@ -36,7 +33,7 @@ class Graph:
 
     def get(self, a, b=None):
         """Return a link distance or a dict of {node: distance} entries."""
-        links = self.graph_dict.setdefault(a, {})
+        links = self.graph_dict.get(a, {})
         if b is None:
             return links
         else:
@@ -50,26 +47,72 @@ class Graph:
         return list(nodes)
 
 def UndirectedGraph(graph_dict=None):
-    """Build a Graph where every edge (including future ones) goes both ways."""
+    """Build a Graph where every edge goes both ways."""
     return Graph(graph_dict=graph_dict, directed=False)
 
-def build_graph_from_cities(cities, k=2):
-    """Build a graph by connecting each city to its k nearest neighbors."""
+def build_graph_from_positions(node_positions, k=2):
+    """Build a graph by connecting each node to its k nearest neighbors."""
     graph = UndirectedGraph()
-    for city in cities:
+    nodes = list(node_positions.keys())
+    for node in nodes:
         distances = []
-        for other_city in cities:
-            if other_city != city:
-                dist = geopy_distance(city.coordinates, other_city.coordinates).kilometers
-                distances.append((other_city.name, dist))
+        x1, y1 = node_positions[node]
+        for other_node in nodes:
+            if other_node != node:
+                x2, y2 = node_positions[other_node]
+                dist = math.hypot(x2 - x1, y2 - y1)
+                distances.append((other_node, dist))
         # Sort distances
         distances.sort(key=lambda x: x[1])
         # Get k nearest neighbors
         nearest_neighbors = distances[:k]
         # Connect to k nearest neighbors
-        for neighbor_name, dist in nearest_neighbors:
-            graph.connect(city.name, neighbor_name, dist)
+        for neighbor_node, dist in nearest_neighbors:
+            graph.connect(node, neighbor_node, dist)
     return graph
+
+def build_mst(node_positions):
+    """Build a Minimum Spanning Tree (MST) from the nodes using Kruskal's algorithm."""
+    parent = {}
+    rank = {}
+    def find(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+    def union(u, v):
+        u_root = find(u)
+        v_root = find(v)
+        if u_root == v_root:
+            return
+        if rank[u_root] < rank[v_root]:
+            parent[u_root] = v_root
+        else:
+            parent[v_root] = u_root
+            if rank[u_root] == rank[v_root]:
+                rank[u_root] += 1
+    edges = []
+    nodes = list(node_positions.keys())
+    # Create all possible edges
+    for i, node in enumerate(nodes):
+        x1, y1 = node_positions[node]
+        for j in range(i+1, len(nodes)):
+            other_node = nodes[j]
+            x2, y2 = node_positions[other_node]
+            dist = math.hypot(x2 - x1, y2 - y1)
+            edges.append((dist, node, other_node))
+    # Initialize disjoint sets
+    for node in nodes:
+        parent[node] = node
+        rank[node] = 0
+    # Kruskal's algorithm
+    edges.sort()
+    mst = UndirectedGraph()
+    for dist, u, v in edges:
+        if find(u) != find(v):
+            union(u, v)
+            mst.connect(u, v, dist)
+    return mst
 
 def total_network_length(graph):
     """Calculate the total length of all edges in the network."""
@@ -149,36 +192,39 @@ def get_connected_components(graph):
         nodes -= component
     return components
 
-def fault_tolerance_metric(graph, city_populations, total_population):
-    """Compute the fault tolerance metric as specified."""
-    edges = get_edges(graph)
+def fault_tolerance_metric(graph):
+    """Compute the fault tolerance metric based on number of nodes reachable."""
+    import copy
+    graph_copy = copy.deepcopy(graph)
+    edges = get_edges(graph_copy)
     fault_metrics = []
     num_edges = len(edges)
+    total_nodes = len(graph_copy.nodes())
     for edge in edges:
         node_a, node_b = edge
         # Remove edge
-        original_distance = graph.get(node_a)[node_b]
-        del graph.graph_dict[node_a][node_b]
-        del graph.graph_dict[node_b][node_a]
+        original_distance = graph_copy.get(node_a)[node_b]
+        del graph_copy.graph_dict[node_a][node_b]
+        del graph_copy.graph_dict[node_b][node_a]
         # Get connected components
-        connected_components = get_connected_components(graph)
-        # Map each city to its connected component
-        city_to_component = {}
+        connected_components = get_connected_components(graph_copy)
+        # Map each node to its connected component
+        node_to_component = {}
         for component in connected_components:
-            for city in component:
-                city_to_component[city] = component
-        # Compute the proportion of the population that each city can reach
+            for node in component:
+                node_to_component[node] = component
+        # Compute the proportion of nodes that each node can reach
         proportions = []
-        for city in graph.nodes():
-            component = city_to_component[city]
-            component_population = sum(city_populations[member] for member in component)
-            proportion = component_population / total_population
+        for node in graph_copy.nodes():
+            component = node_to_component[node]
+            component_size = len(component)
+            proportion = component_size / total_nodes
             proportions.append(proportion)
         # Compute the average of these proportions
         average_proportion = sum(proportions) / len(proportions)
         # Compute average shortest path length in the largest connected component
         largest_component = max(connected_components, key=len)
-        subgraph = subgraph_induced(graph, largest_component)
+        subgraph = subgraph_induced(graph_copy, largest_component)
         avg_shortest_path = average_shortest_path_length(subgraph)
         # Compute fault tolerance metric
         if average_proportion > 0:
@@ -187,7 +233,7 @@ def fault_tolerance_metric(graph, city_populations, total_population):
             fault_metric = float('inf')
         fault_metrics.append(fault_metric)
         # Restore edge
-        graph.connect(node_a, node_b, original_distance)
+        graph_copy.connect(node_a, node_b, original_distance)
     # Compute the average of fault metrics
     fault_tolerance_value = sum(fault_metrics) / num_edges if num_edges > 0 else float('inf')
     return fault_tolerance_value
@@ -203,54 +249,94 @@ def subgraph_induced(graph, nodes_set):
     new_graph = UndirectedGraph(new_graph_dict)
     return new_graph
 
-def main():
-    # List of City objects
-    cities = [
-        City("Boston", 650706, Point("42.3601 N 71.0589 W")),
-        City("Worcester", 205319, Point("42.2626 N 71.8023 W")),
-        City("Springfield", 153337, Point("42.1015 N 72.5898 W")),
-        City("Cambridge", 119008, Point("42.3736 N 71.1097 W")),
-        City("Lowell", 114401, Point("42.6334 N 71.3162 W")),
-        City("Brockton", 104889, Point("42.0834 N 71.0184 W")),
-        City("New Bedford", 100757, Point("41.6362 N 70.9342 W")),
-        City("Quincy", 101380, Point("42.2529 N 71.0023 W")),
-        City("Lynn", 101603, Point("42.4668 N 70.9495 W")),
-        City("Fall River", 94044, Point("41.7015 N 71.1550 W")),
-    ]
-    # Create a mapping from city names to populations
-    city_populations = {city.name: city.population for city in cities}
-    total_population = sum(city_populations.values())
-    # Build the graphs from cities
-    two_graph = build_graph_from_cities(cities, k=2)
-    three_graph = build_graph_from_cities(cities, k=3)
+def update_edge_lengths(graph):
+    """Update the edge lengths in the graph to be the Euclidean distance between nodes."""
+    for node in graph.nodes():
+        neighbors = list(graph.get(node).keys())
+        x1, y1 = node  # Node is a tuple of (x, y)
+        for neighbor in neighbors:
+            x2, y2 = neighbor  # Neighbor is also a tuple of (x, y)
+            distance = math.hypot(x2 - x1, y2 - y1)
+            graph.graph_dict[node][neighbor] = distance
+    return graph
 
-    # Calculate metrics for both graphs
-    metrics = {
-        'Total Network Length (km)': {
-            '2-Nearest Neighbors': total_network_length(two_graph),
-            '3-Nearest Neighbors': total_network_length(three_graph)
-        },
-        'Average Shortest Path Length (km)': {
-            '2-Nearest Neighbors': average_shortest_path_length(two_graph),
-            '3-Nearest Neighbors': average_shortest_path_length(three_graph)
-        },
-        'Fault Tolerance Metric': {
-            '2-Nearest Neighbors': fault_tolerance_metric(two_graph, city_populations, total_population),
-            '3-Nearest Neighbors': fault_tolerance_metric(three_graph, city_populations, total_population)
-        }
-    }
+def main():
+    base_path = "/Results Graphs/"
+    metrics_per_graph = {}
+
+    for i in range(1, 11):
+        file_path = os.path.join(base_path, f"{i}.pkl")
+        if not os.path.exists(file_path):
+            print(f"File {file_path} does not exist.")
+            continue
+
+        with open(file_path, "rb") as f:
+            graph_dict = pickle.load(f)
+            graph = UndirectedGraph(graph_dict)
+
+            # Since nodes are positions, we can use them directly
+            node_positions = {node: node for node in graph.nodes()}
+
+            # Update edge lengths in the Slime graph
+            graph = update_edge_lengths(graph)
+
+            # Build 2-nearest and 3-nearest neighbor graphs
+            two_graph = build_graph_from_positions(node_positions, k=2)
+            three_graph = build_graph_from_positions(node_positions, k=3)
+
+            # Build Minimum Spanning Tree
+            mst_graph = build_mst(node_positions)
+
+            # Calculate metrics for all graphs
+            metrics = {
+                'Total Network Length': {
+                    '2-Nearest Neighbors': total_network_length(two_graph),
+                    '3-Nearest Neighbors': total_network_length(three_graph),
+                    'Slime graph': total_network_length(graph),
+                    'Shortest Path graph': total_network_length(mst_graph)
+                },
+                'Average Shortest Path Length': {
+                    '2-Nearest Neighbors': average_shortest_path_length(two_graph),
+                    '3-Nearest Neighbors': average_shortest_path_length(three_graph),
+                    'Slime graph': average_shortest_path_length(graph),
+                    'Shortest Path graph': average_shortest_path_length(mst_graph)
+                },
+                'Fault Tolerance Metric': {
+                    '2-Nearest Neighbors': fault_tolerance_metric(two_graph),
+                    '3-Nearest Neighbors': fault_tolerance_metric(three_graph),
+                    'Slime graph': fault_tolerance_metric(graph),
+                    'Shortest Path graph': fault_tolerance_metric(mst_graph)
+                }
+            }
+
+            metrics_per_graph[f"Graph {i}"] = metrics
 
     # Prepare data for tabulate
-    table = []
-    for metric_name, values in metrics.items():
-        value_two = f"{values['2-Nearest Neighbors']:.2f}"
-        value_three = f"{values['3-Nearest Neighbors']:.2f}"
-        table.append([metric_name, value_two, value_three])
+    graph_types = ['2-Nearest Neighbors', '3-Nearest Neighbors', 'Slime graph', 'Shortest Path graph']
+    for metric_name in ['Total Network Length', 'Average Shortest Path Length', 'Fault Tolerance Metric']:
+        table = []
+        headers = ['Graph'] + graph_types
+        sum_values = {graph_type: 0.0 for graph_type in graph_types}
+        count = 0
+        for graph_name, metrics in metrics_per_graph.items():
+            values = metrics[metric_name]
+            row = [graph_name]
+            for graph_type in graph_types:
+                value = values[graph_type]
+                sum_values[graph_type] += value
+                row.append(f"{value:.2f}")
+            count += 1
+            table.append(row)
 
-    # Print the table using tabulate
-    headers = ['Metric', '2-Nearest Neighbors', '3-Nearest Neighbors']
-    print("\nComparison of Graphs with 2 and 3 Nearest Neighbors:")
-    print(tabulate(table, headers=headers, tablefmt="github"))
+        # Compute averages
+        avg_row = ['Average']
+        for graph_type in graph_types:
+            avg_value = sum_values[graph_type] / count if count > 0 else float('inf')
+            avg_row.append(f"{avg_value:.2f}")
+        table.append(avg_row)
+
+        print(f"\n{metric_name}:")
+        print(tabulate(table, headers=headers, tablefmt="github"))
 
 if __name__ == "__main__":
     main()
